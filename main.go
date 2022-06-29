@@ -18,8 +18,10 @@ var (
 	duration = flag.Int("duration", 5, "Duration of recording segments in hours")
 	timeout  = flag.Int("timeout", 5, "Timeout in seconds")
 	url      = flag.String("url", "https://broadcastify.cdnstream1.com/31315", "Streaming URL")
+	prefix   = flag.String("prefix", "QVEC", "Record file prefix")
 
 	lastStarted time.Time
+	client      http.Client
 )
 
 func main() {
@@ -28,7 +30,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	log.Printf("Starting up")
-	client := http.Client{
+	client = http.Client{
 		Transport: &http.Transport{
 			Dial: (&net.Dialer{
 				Timeout:   time.Duration(*timeout*3) * time.Second,
@@ -57,38 +59,45 @@ func main() {
 	}()
 
 	for {
-		lastStarted = time.Now()
-
-		fn := fmt.Sprintf("QVEC-%s.mp3", lastStarted.Format("2006-01-02-15-04"))
-
-		fp, err := os.Create(fn)
-		if err != nil {
-			log.Printf("ERR: unable to create file: %v\n", err)
-			os.Exit(1)
-		}
-		defer fp.Close()
-
-		req, err := http.NewRequest("GET", *url, nil)
-		if err != nil {
-			log.Printf("ERR: creating request: %v\n", err)
-			os.Exit(1)
-		}
-		resp, err := client.Do(req.WithContext(ctx))
+		err := loop(ctx, cancel)
 		if err != nil {
 			log.Printf("ERR: %s", err.Error())
-			os.Exit(1)
 		}
-		bar := progressbar.DefaultBytes(
-			-1,
-			"downloading",
-		)
-		log.Printf("Writing to %s", fn)
-		io.Copy(io.MultiWriter(fp, bar), resp.Body)
-
-		fmt.Println("") // make more readable
-
-		log.Printf("Cancel detected, moving to next loop")
-		ctx, cancel = context.WithCancel(context.Background())
+		client.CloseIdleConnections()
 		time.Sleep(100 * time.Millisecond) // keep from piling on
 	}
+}
+
+func loop(ctx context.Context, cancel context.CancelFunc) error {
+	lastStarted = time.Now()
+
+	fn := fmt.Sprintf("%s-%s.mp3", *prefix, lastStarted.Format("2006-01-02-15-04"))
+
+	fp, err := os.Create(fn)
+	if err != nil {
+		return err
+	}
+	defer fp.Close()
+
+	req, err := http.NewRequest("GET", *url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req.WithContext(ctx))
+	if err != nil {
+		return err
+	}
+	bar := progressbar.DefaultBytes(
+		-1,
+		"downloading",
+	)
+	log.Printf("Writing to %s", fn)
+	io.Copy(io.MultiWriter(fp, bar), resp.Body)
+	defer resp.Body.Close()
+
+	fmt.Println("") // make more readable
+
+	log.Printf("Cancel detected, moving to next loop")
+	ctx, cancel = context.WithCancel(context.Background())
+	return nil
 }
