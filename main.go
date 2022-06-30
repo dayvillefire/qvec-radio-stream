@@ -64,6 +64,7 @@ func main() {
 			log.Printf("ERR: %s", err.Error())
 		}
 		client.CloseIdleConnections()
+		ctx, cancel = context.WithCancel(context.Background())
 		time.Sleep(100 * time.Millisecond) // keep from piling on
 	}
 }
@@ -85,6 +86,7 @@ func loop(ctx context.Context, cancel context.CancelFunc) error {
 	}
 	resp, err := client.Do(req.WithContext(ctx))
 	if err != nil {
+		ctx, cancel = context.WithCancel(context.Background())
 		return err
 	}
 	bar := progressbar.DefaultBytes(
@@ -98,6 +100,5 @@ func loop(ctx context.Context, cancel context.CancelFunc) error {
 	fmt.Println("") // make more readable
 
 	log.Printf("Cancel detected, moving to next loop")
-	ctx, cancel = context.WithCancel(context.Background())
 	return nil
 }
