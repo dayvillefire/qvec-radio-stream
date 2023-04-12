@@ -1,6 +1,6 @@
 module github.com/dayvillefire/qvec-radio-stream
 
-go 1.18
+go 1.20
 
 require github.com/schollz/progressbar/v3 v3.8.6
 

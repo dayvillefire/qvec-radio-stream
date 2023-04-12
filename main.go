@@ -95,10 +95,23 @@ func loop(ctx context.Context, cancel context.CancelFunc) error {
 	)
 	log.Printf("Writing to %s", fn)
 	io.Copy(io.MultiWriter(fp, bar), resp.Body)
-	defer resp.Body.Close()
+	defer func(fn string, resp *http.Response) {
+		resp.Body.Close()
+		fmt.Println("") // make more readable
+
+		// Determine if this is so small that it's obviously garbage
+		fs, err := os.Stat(fn)
+		if err != nil {
+			log.Printf("ERR: %s: %s", fn, err.Error())
+			return
+		}
+		if fs.Size() < 1024 {
+			log.Printf("ERR: %s size of %d indicates bad file, removing", fn, fs.Size())
+			os.Remove(fn)
+		}
+	}(fn, resp)
 
 	fmt.Println("") // make more readable
-
 	log.Printf("Cancel detected, moving to next loop")
 	return nil
 }
